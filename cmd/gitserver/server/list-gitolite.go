@@ -29,8 +29,7 @@ func listGitolite(ctx context.Context, gitoliteHost string, w http.ResponseWrite
 		if gconf.Host != gitoliteHost {
 			continue
 		}
-		cl := &gitolite.Client{Host: gconf.Host}
-		rp, err := cl.ListRepos(ctx, gconf.Host)
+		rp, err := gitolite.NewClient(gconf.Host).ListRepos(ctx, gconf.Host)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

@@ -1,3 +1,4 @@
+//go:generate mockgen -destination mock_gitolite/mocks.go github.com/sourcegraph/sourcegraph/pkg/extsvc/gitolite ClientDeps
 package gitolite
 
 import (
@@ -8,6 +9,11 @@ import (
 	log15 "gopkg.in/inconshreveable/log15.v2"
 )
 
+type Repo struct {
+	Name string // the name of the repository as it is returned by `ssh git@GITOLITE_HOST info`
+	URL  string // the clone URL of the repository
+}
+
 // Client is a client for the Gitolite API.
 //
 // IMPORTANT: in order to authenticate to the Gitolite API, the client must be invoked from a
@@ -16,16 +22,18 @@ import (
 type Client struct {
 	Host string
 
-	*clientMock
+	ClientDeps
 }
 
-type Repo struct {
-	Name string // the name of the repository as it is returned by `ssh git@GITOLITE_HOST info`
-	URL  string // the clone URL of the repository
+func NewClient(host string) *Client {
+	return &Client{
+		Host:       host,
+		ClientDeps: clientDeps{},
+	}
 }
 
 func (c *Client) ListRepos(ctx context.Context) ([]*Repo, error) {
-	out, err := c.commandOutput(ctx, "ssh", c.Host, "info")
+	out, err := c.CommandOutput(ctx, "ssh", c.Host, "info")
 	if err != nil {
 		log15.Error("listing gitolite failed", "error", err, "out", string(out))
 		return nil, err
@@ -50,13 +58,12 @@ func (c *Client) ListRepos(ctx context.Context) ([]*Repo, error) {
 	return repos, nil
 }
 
-type clientMock struct {
-	mockCommandOutput func(ctx context.Context, name string, arg ...string) ([]byte, error)
+type ClientDeps interface {
+	CommandOutput(ctx context.Context, name string, arg ...string) ([]byte, error)
 }
 
-func (c *clientMock) commandOutput(ctx context.Context, name string, arg ...string) ([]byte, error) {
-	if c != nil {
-		return c.mockCommandOutput(ctx, name, arg...)
-	}
+type clientDeps struct{}
+
+func (c clientDeps) CommandOutput(ctx context.Context, name string, arg ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, name, arg...).Output()
 }
