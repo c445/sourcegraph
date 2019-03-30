@@ -15,6 +15,8 @@ import (
 // gitserver meets this criterion. (I.e., only invoke this from gitserver.)
 type Client struct {
 	Host string
+
+	*clientMock
 }
 
 type Repo struct {
@@ -22,8 +24,8 @@ type Repo struct {
 	URL  string // the clone URL of the repository
 }
 
-func (c *Client) ListRepos(ctx context.Context, blacklistStr string) ([]*Repo, error) {
-	out, err := exec.CommandContext(ctx, "ssh", c.Host, "info").Output()
+func (c *Client) ListRepos(ctx context.Context) ([]*Repo, error) {
+	out, err := c.commandOutput(ctx, "ssh", c.Host, "info")
 	if err != nil {
 		log15.Error("listing gitolite failed", "error", err, "out", string(out))
 		return nil, err
@@ -46,4 +48,15 @@ func (c *Client) ListRepos(ctx context.Context, blacklistStr string) ([]*Repo, e
 	}
 
 	return repos, nil
+}
+
+type clientMock struct {
+	mockCommandOutput func(ctx context.Context, name string, arg ...string) ([]byte, error)
+}
+
+func (c *clientMock) commandOutput(ctx context.Context, name string, arg ...string) ([]byte, error) {
+	if c != nil {
+		return c.mockCommandOutput(ctx, name, arg...)
+	}
+	return exec.CommandContext(ctx, name, arg...).Output()
 }
