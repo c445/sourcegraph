@@ -9,13 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sourcegraph/sourcegraph/pkg/conf"
-	"github.com/sourcegraph/sourcegraph/pkg/httpcli"
-
 	"github.com/gregjones/httpcache"
 	"github.com/opentracing-contrib/go-stdlib/nethttp"
 	"github.com/pkg/errors"
 	"github.com/sourcegraph/sourcegraph/pkg/api"
+	"github.com/sourcegraph/sourcegraph/pkg/conf"
+	"github.com/sourcegraph/sourcegraph/pkg/httpcli"
 	"github.com/sourcegraph/sourcegraph/pkg/httputil"
 	log15 "gopkg.in/inconshreveable/log15.v2"
 )

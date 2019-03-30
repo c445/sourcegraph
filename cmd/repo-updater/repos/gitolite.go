@@ -3,12 +3,15 @@ package repos
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/sourcegraph/sourcegraph/pkg/api"
 	"github.com/sourcegraph/sourcegraph/pkg/conf"
+	"github.com/sourcegraph/sourcegraph/pkg/conf/reposource"
+	"github.com/sourcegraph/sourcegraph/pkg/extsvc/gitolite"
 	"github.com/sourcegraph/sourcegraph/pkg/gitserver"
 	"github.com/sourcegraph/sourcegraph/pkg/repoupdater/protocol"
 	"github.com/sourcegraph/sourcegraph/schema"
@@ -107,7 +110,11 @@ func tryUpdateGitolitePhabricatorMetadata(ctx context.Context, gconf *schema.Git
 // Gitolite connection.
 func gitoliteUpdateRepos(ctx context.Context, gconf *schema.GitoliteConnection, doPhabricator bool) error {
 	// Get list of Gitolite repositories for this connection.
-	rlist, err := gitserver.DefaultClient.ListGitolite(ctx, gconf.Host)
+	allRepos, err := gitserver.DefaultClient.ListGitolite(ctx, gconf.Host)
+	if err != nil {
+		return err
+	}
+	repos, err := filterBlacklist(gconf, allRepos)
 	if err != nil {
 		return err
 	}
@@ -116,18 +123,56 @@ func gitoliteUpdateRepos(ctx context.Context, gconf *schema.GitoliteConnection, 
 	defer close(repoChan)
 	go createEnableUpdateRepos(ctx, fmt.Sprintf("gitolite:%s", gconf.Prefix), repoChan)
 	if doPhabricator && gconf.Phabricator != nil {
-		go tryUpdateGitolitePhabricatorMetadata(ctx, gconf, rlist)
+		go tryUpdateGitolitePhabricatorMetadata(ctx, gconf, repoNames(repos)) // TODO(beyang): audit
 	}
-	for _, entry := range rlist {
-		// We don't have descriptions available for these. The old code didn't do that either.
-		url := strings.Replace(entry, gconf.Prefix, gconf.Host+":", 1)
+	for _, gitoliteRepo := range repos {
 		repoChan <- repoCreateOrUpdateRequest{
 			RepoCreateOrUpdateRequest: api.RepoCreateOrUpdateRequest{
-				RepoName: api.RepoName(entry),
-				Enabled:  true,
+				RepoName:     reposource.GitoliteRepoName(gconf.Prefix, gitoliteRepo.Name),
+				ExternalRepo: gitolite.ExternalRepoSpec(gitoliteRepo, gitolite.ServiceID(gconf.Host)),
+				Enabled:      true,
 			},
-			URL: url,
+			URL: gitoliteRepo.URL,
 		}
 	}
 	return nil
+}
+
+func filterBlacklist(gconf *schema.GitoliteConnection, allRepos []*gitolite.Repo) ([]*gitolite.Repo, error) {
+	// filter out blacklist
+	blacklist, err := blacklistRegexp(gconf.Blacklist)
+	if err != nil {
+		log15.Error("Invalid regexp for Gitolite blacklist", "expr", gconf.Blacklist, "err", err)
+		return nil, err
+	}
+	blacklistCount := 0
+	var repos []*gitolite.Repo
+	for _, r := range allRepos {
+		repoName := string(reposource.GitoliteRepoName(gconf.Prefix, r.Name))
+
+		if strings.ContainsAny(repoName, "\\^$|()[]*?{},") || (blacklist != nil && blacklist.MatchString(repoName)) {
+			blacklistCount++
+			continue
+		}
+		repos = append(repos, r)
+	}
+	if blacklistCount > 0 {
+		log15.Info("Excluded blacklisted Gitolite repositories", "num", blacklistCount)
+	}
+	return repos, nil
+}
+
+func blacklistRegexp(blacklistStr string) (*regexp.Regexp, error) {
+	if blacklistStr == "" {
+		return nil, nil
+	}
+	return regexp.Compile(blacklistStr)
+}
+
+func repoNames(repos []*gitolite.Repo) []string {
+	names := make([]string, 0, len(repos))
+	for _, repo := range repos {
+		names = append(names, repo.Name)
+	}
+	return names
 }

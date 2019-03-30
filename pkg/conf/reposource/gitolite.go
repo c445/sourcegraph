@@ -28,9 +28,10 @@ func (c Gitolite) CloneURLToRepoName(cloneURL string) (repoName api.RepoName, er
 	return GitoliteRepoName(c.Prefix, strings.TrimPrefix(strings.TrimSuffix(parsedCloneURL.Path, ".git"), "/")), nil
 }
 
-func GitoliteRepoName(prefix, path string) api.RepoName {
+func GitoliteRepoName(prefix, gitoliteName string) api.RepoName {
+	gitoliteNameWithNoIllegalChars := strings.Replace(gitoliteName, "@", "-", -1)
 	return api.RepoName(strings.NewReplacer(
 		"{prefix}", prefix,
-		"{path}", path,
-	).Replace("{prefix}{path}"))
+		"{gitoliteName}", gitoliteNameWithNoIllegalChars,
+	).Replace("{prefix}{gitoliteName}"))
 }
