@@ -75,7 +75,7 @@ func GetGitoliteRepository(ctx context.Context, args protocol.RepoLookupArgs) (r
 
 // tryUpdateGitolitePhabricatorMetadata attempts to update Phabricator metadata for a Gitolite-sourced repository, if it
 // is appropriate to do so.
-func tryUpdateGitolitePhabricatorMetadata(ctx context.Context, gconf *schema.GitoliteConnection, repos []string) {
+func tryUpdateGitolitePhabricatorMetadata(ctx context.Context, gconf *schema.GitoliteConnection, repoNames []api.RepoName) {
 	if gconf.Phabricator == nil {
 		return
 	}
@@ -87,7 +87,7 @@ func tryUpdateGitolitePhabricatorMetadata(ctx context.Context, gconf *schema.Git
 	}
 	phabTaskRunning = true
 	phabTaskMu.Unlock()
-	for _, repoName := range repos {
+	for _, repoName := range repoNames {
 		metadata, err := gitserver.DefaultClient.GetGitolitePhabricatorMetadata(ctx, gconf.Host, repoName)
 		if err != nil {
 			log15.Warn("could not fetch valid Phabricator metadata for Gitolite repository", "repo", repoName, "error", err)
@@ -96,14 +96,14 @@ func tryUpdateGitolitePhabricatorMetadata(ctx context.Context, gconf *schema.Git
 		if metadata.Callsign == "" {
 			continue
 		}
-		if err := api.InternalClient.PhabricatorRepoCreate(ctx, api.RepoName(repoName), metadata.Callsign, gconf.Phabricator.Url); err != nil {
+		if err := api.InternalClient.PhabricatorRepoCreate(ctx, repoName, metadata.Callsign, gconf.Phabricator.Url); err != nil {
 			log15.Warn("could not ensure Gitolite Phabricator mapping", "repo", repoName, "error", err)
 		}
 	}
 	phabTaskMu.Lock()
 	phabTaskRunning = false
 	phabTaskMu.Unlock()
-	log15.Info("updated gitolite/phabricator metadata for repos", "repos", len(repos))
+	log15.Info("updated gitolite/phabricator metadata for repos", "repos", len(repoNames))
 }
 
 // gitoliteUpdateRepos updates the repos associated with a specific
@@ -123,7 +123,7 @@ func gitoliteUpdateRepos(ctx context.Context, gconf *schema.GitoliteConnection, 
 	defer close(repoChan)
 	go createEnableUpdateRepos(ctx, fmt.Sprintf("gitolite:%s", gconf.Prefix), repoChan)
 	if doPhabricator && gconf.Phabricator != nil {
-		go tryUpdateGitolitePhabricatorMetadata(ctx, gconf, repoNames(repos)) // TODO(beyang): audit
+		go tryUpdateGitolitePhabricatorMetadata(ctx, gconf, repoNames(gconf.Prefix, repos))
 	}
 	for _, gitoliteRepo := range repos {
 		repoChan <- repoCreateOrUpdateRequest{
@@ -169,10 +169,10 @@ func blacklistRegexp(blacklistStr string) (*regexp.Regexp, error) {
 	return regexp.Compile(blacklistStr)
 }
 
-func repoNames(repos []*gitolite.Repo) []string {
-	names := make([]string, 0, len(repos))
+func repoNames(prefix string, repos []*gitolite.Repo) []api.RepoName {
+	names := make([]api.RepoName, 0, len(repos))
 	for _, repo := range repos {
-		names = append(names, repo.Name)
+		names = append(names, reposource.GitoliteRepoName(prefix, repo.Name))
 	}
 	return names
 }

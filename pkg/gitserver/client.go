@@ -410,10 +410,10 @@ func (c *Client) ListCloned(ctx context.Context) ([]string, error) {
 	return repos, err
 }
 
-// GetGitolitePhabricatorMetadata returns Phabricator metadata for a
-// Gitolite repository fetched via a user-provided command.
-func (c *Client) GetGitolitePhabricatorMetadata(ctx context.Context, gitoliteHost string, repo string) (*protocol.GitolitePhabricatorMetadataResponse, error) {
-	u := "http://" + c.addrForKey(ctx, gitoliteHost) + "/getGitolitePhabricatorMetadata?gitolite=" + url.QueryEscape(gitoliteHost) + "&repo=" + url.QueryEscape(repo)
+// GetGitolitePhabricatorMetadata returns Phabricator metadata for a Gitolite repository fetched via
+// a user-provided command.
+func (c *Client) GetGitolitePhabricatorMetadata(ctx context.Context, gitoliteHost string, repoName api.RepoName) (*protocol.GitolitePhabricatorMetadataResponse, error) {
+	u := "http://" + c.addrForKey(ctx, gitoliteHost) + "/getGitolitePhabricatorMetadata?gitolite=" + url.QueryEscape(gitoliteHost) + "&repo=" + url.QueryEscape(string(repoName))
 	resp, err := ctxhttp.Get(ctx, nil, u)
 	if err != nil {
 		return nil, err

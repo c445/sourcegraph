@@ -8,6 +8,11 @@ import (
 	log15 "gopkg.in/inconshreveable/log15.v2"
 )
 
+// Client is a client for the Gitolite API.
+//
+// IMPORTANT: in order to authenticate to the Gitolite API, the client must be invoked from a
+// service in an environment that contains a Gitolite-authorized SSH key. As of writing, only
+// gitserver meets this criterion. (I.e., only invoke this from gitserver.)
 type Client struct {
 	Host string
 }
